@@ -2,3 +2,5 @@ data
 .venv
 __pycache__
 .env
+*.ipynb
+.ipynb_checkpoints/

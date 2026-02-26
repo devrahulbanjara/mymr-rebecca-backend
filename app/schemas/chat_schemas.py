@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -9,14 +9,24 @@ class ChatRequest(BaseModel):
     document_type: Optional[str] = None
 
 
-class UsefulCitation(BaseModel):
-    start_character: int
-    end_character: int
-    source_chunk: str
-    file_uri: str
-    page_number: int
+class RetrievalResult(BaseModel):
+    content: str
+    score: float
+    uri: Optional[str] = None
+
+
+class RetrievalResponse(BaseModel):
+    results: List[RetrievalResult]
+
+
+class LLMResponse(BaseModel):
+    model_name: str
+    response: str
+    latency: Optional[float] = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_cost: float | None = None
 
 
 class ChatResponse(BaseModel):
-    answer: str
-    useful_citations: list[UsefulCitation]
+    complete_response: List[LLMResponse]
