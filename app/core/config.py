@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     RERANK_MODEL_ARN: str
     AWS_DEFAULT_REGION: str
     KNOWLEDGE_BASE_ID: str
+    GROQ_API_KEY: str
 
     class Config:
         env_file = ".env"

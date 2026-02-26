@@ -1,23 +1,106 @@
-# import torch
-# from transformers import pipeline, BitsAndBytesConfig
+import json
+from groq import Groq
 from app.core.config import settings
+from app.core.logging_config import logger
+from typing import List, Dict
+from prompts.classifier_prompt import CLASSIFIER_PROMPT
 
 
 class LLMService:
-    # _medgemma_pipeline = None
-
     def __init__(self, bedrock_runtime):
         self.region = settings.AWS_DEFAULT_REGION
         self.model_id = settings.MODEL_ID
         self.bedrock_runtime = bedrock_runtime
+        self.groq_client = Groq(api_key=settings.GROQ_API_KEY)
 
-    def infer_claude(self, prompt):
-        messages = [{"role": "user", "content": [{"text": prompt}]}]
+    def classify_intent(self, query: str, history_str: str) -> bool:
+        """
+        Uses Groq to determine if the Knowledge Base is needed.
+        
+        Args:
+            query: The user's current question
+            history_str: Formatted conversation history
+            
+        Returns:
+            bool: True if KB is required, False otherwise
+        """
+        prompt = CLASSIFIER_PROMPT.format(history=history_str, query=query)
+        
+        try:
+            response = self.groq_client.chat.completions.create(
+                model="openai/gpt-oss-120b",  # High intelligence for classification
+                messages=[{"role": "user", "content": prompt}],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "intent_classification",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "kb_required": {"type": "boolean"},
+                                "reasoning": {"type": "string"}
+                            },
+                            "required": ["kb_required", "reasoning"],
+                            "additionalProperties": False
+                        }
+                    }
+                }
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            kb_required = result.get("kb_required", True)
+            reasoning = result.get("reasoning", "No reasoning provided")
+            
+            # Log the classification decision with reasoning
+            logger.info(
+                f"🔍 Query Classification | "
+                f"Query: '{query[:100]}{'...' if len(query) > 100 else ''}' | "
+                f"KB Required: {kb_required} | "
+                f"Reasoning: {reasoning}"
+            )
+            
+            return kb_required
+        except Exception as e:
+            logger.error(f"❌ Classification error: {e} | Defaulting to KB fetch")
+            return True
+
+    def infer_claude(self, system_prompt: str, user_prompt: str, conversation_history: List[Dict[str, str]] = None):
+        """
+        Invoke Claude using the proper system and messages structure.
+        
+        Args:
+            system_prompt: The system instructions (Rebecca's personality and rules)
+            user_prompt: The current user prompt with context
+            conversation_history: List of previous messages [{"role": "user/assistant", "content": "..."}]
+            
+        Returns:
+            Tuple of (response_text, input_tokens, output_tokens)
+        """
+        messages = []
+        
+        # 1. Add conversation history (this is your memory)
+        if conversation_history:
+            for msg in conversation_history:
+                messages.append({
+                    "role": msg["role"],
+                    "content": [{"text": msg["content"]}]
+                })
+        
+        # 2. Add current user prompt
+        messages.append({
+            "role": "user",
+            "content": [{"text": user_prompt}]
+        })
+        
+        # 3. Use the dedicated 'system' parameter in Bedrock
         response = self.bedrock_runtime.converse(
             modelId=self.model_id,
+            system=[{"text": system_prompt}],  # Correct way to pass system instructions
             messages=messages,
             inferenceConfig={"maxTokens": 1024, "temperature": 0.2},
         )
+        
         usage = response.get("usage", {})
         return (
             response["output"]["message"]["content"][0]["text"],
