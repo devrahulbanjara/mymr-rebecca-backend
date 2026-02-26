@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 # import logfire
 from app.routes import api_router
 
@@ -6,6 +7,15 @@ app = FastAPI(
     title="Rebecca API",
     description="API for Rebecca which lets patients and providers chat with medical records",
     version="1.0.0",
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # logfire.configure()
